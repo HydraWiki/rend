@@ -15,6 +15,7 @@
 package inmem
 
 import (
+	"strconv"
 	"sync"
 	"time"
 
@@ -159,6 +160,41 @@ func (h *Handler) Prepend(cmd common.SetRequest) error {
 	return nil
 }
 
+func (h *Handler) Increment(cmd common.IncrementRequest) (uint64, error) {
+	h.mutex.Lock()
+
+	e, ok := h.data[string(cmd.Key)]
+
+	if !ok || e.isExpired() {
+		delete(h.data, string(cmd.Key))
+		h.mutex.Unlock()
+		return 0, common.ErrKeyNotFound
+	}
+
+	// NOTE: memcached uses strtoull which has the notable difference from strconv.ParseUint of
+	// discarding leading whitespace and not erroring on invalid digits.
+	val, err := strconv.ParseUint(string(e.data), 10, 64)
+	if err != nil {
+		h.mutex.Unlock()
+		return 0, common.ErrBadIncDecValue
+	}
+
+	if cmd.Decrement {
+		val -= cmd.Delta
+	} else {
+		val += cmd.Delta
+	}
+
+	h.data[string(cmd.Key)] = entry{
+		data:    strconv.AppendUint(nil, val, 10),
+		exptime: e.exptime,
+		flags:   e.flags,
+	}
+
+	h.mutex.Unlock()
+	return val, nil
+}
+
 func (h *Handler) Get(cmd common.GetRequest) (<-chan common.GetResponse, <-chan error) {
 	dataOut := make(chan common.GetResponse, len(cmd.Keys))
 	errorOut := make(chan error)
@@ -171,21 +207,23 @@ func (h *Handler) Get(cmd common.GetRequest) (<-chan common.GetResponse, <-chan 
 		if !ok || e.isExpired() {
 			delete(h.data, string(bk))
 			dataOut <- common.GetResponse{
-				Miss:   true,
-				Quiet:  cmd.Quiet[idx],
-				Opaque: cmd.Opaques[idx],
-				Key:    bk,
+				Miss:    true,
+				Quiet:   cmd.Quiet[idx],
+				Opaque:  cmd.Opaques[idx],
+				WithKey: cmd.WithKey[idx],
+				Key:     bk,
 			}
 			continue
 		}
 
 		dataOut <- common.GetResponse{
-			Miss:   false,
-			Quiet:  cmd.Quiet[idx],
-			Opaque: cmd.Opaques[idx],
-			Flags:  e.flags,
-			Key:    bk,
-			Data:   e.data,
+			Miss:    false,
+			Quiet:   cmd.Quiet[idx],
+			Opaque:  cmd.Opaques[idx],
+			WithKey: cmd.WithKey[idx],
+			Flags:   e.flags,
+			Key:     bk,
+			Data:    e.data,
 		}
 	}
 
@@ -208,10 +246,11 @@ func (h *Handler) GetE(cmd common.GetRequest) (<-chan common.GetEResponse, <-cha
 		if !ok || e.isExpired() {
 			delete(h.data, string(bk))
 			dataOut <- common.GetEResponse{
-				Miss:   true,
-				Quiet:  cmd.Quiet[idx],
-				Opaque: cmd.Opaques[idx],
-				Key:    bk,
+				Miss:    true,
+				Quiet:   cmd.Quiet[idx],
+				Opaque:  cmd.Opaques[idx],
+				WithKey: cmd.WithKey[idx],
+				Key:     bk,
 			}
 			continue
 		}
@@ -220,6 +259,7 @@ func (h *Handler) GetE(cmd common.GetRequest) (<-chan common.GetEResponse, <-cha
 			Miss:    false,
 			Quiet:   cmd.Quiet[idx],
 			Opaque:  cmd.Opaques[idx],
+			WithKey: cmd.WithKey[idx],
 			Exptime: e.exptime,
 			Flags:   e.flags,
 			Key:     bk,

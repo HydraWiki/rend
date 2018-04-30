@@ -58,6 +58,7 @@ type testOrca struct {
 	replaceRes,
 	appendRes,
 	prependRes,
+	incrementRes,
 	deleteRes,
 	touchRes,
 	getRes,
@@ -90,6 +91,10 @@ func (t *testOrca) Append(req common.SetRequest) error {
 func (t *testOrca) Prepend(req common.SetRequest) error {
 	t.called["Prepend"] = nil
 	return t.prependRes
+}
+func (t *testOrca) Increment(req common.IncrementRequest) error {
+	t.called["Increment"] = nil
+	return t.incrementRes
 }
 func (t *testOrca) Delete(req common.DeleteRequest) error {
 	t.called["Delete"] = nil
@@ -131,20 +136,21 @@ func (t *testOrca) Error(req common.Request, reqType common.RequestType, err err
 
 type testPanicOrca struct{}
 
-func (t testPanicOrca) Set(req common.SetRequest) error         { panic("test") }
-func (t testPanicOrca) Add(req common.SetRequest) error         { panic("test") }
-func (t testPanicOrca) Replace(req common.SetRequest) error     { panic("test") }
-func (t testPanicOrca) Append(req common.SetRequest) error      { panic("test") }
-func (t testPanicOrca) Prepend(req common.SetRequest) error     { panic("test") }
-func (t testPanicOrca) Delete(req common.DeleteRequest) error   { panic("test") }
-func (t testPanicOrca) Touch(req common.TouchRequest) error     { panic("test") }
-func (t testPanicOrca) Get(req common.GetRequest) error         { panic("test") }
-func (t testPanicOrca) GetE(req common.GetRequest) error        { panic("test") }
-func (t testPanicOrca) Gat(req common.GATRequest) error         { panic("test") }
-func (t testPanicOrca) Noop(req common.NoopRequest) error       { panic("test") }
-func (t testPanicOrca) Quit(req common.QuitRequest) error       { panic("test") }
-func (t testPanicOrca) Version(req common.VersionRequest) error { panic("test") }
-func (t testPanicOrca) Unknown(req common.Request) error        { panic("test") }
+func (t testPanicOrca) Set(req common.SetRequest) error             { panic("test") }
+func (t testPanicOrca) Add(req common.SetRequest) error             { panic("test") }
+func (t testPanicOrca) Replace(req common.SetRequest) error         { panic("test") }
+func (t testPanicOrca) Append(req common.SetRequest) error          { panic("test") }
+func (t testPanicOrca) Prepend(req common.SetRequest) error         { panic("test") }
+func (t testPanicOrca) Increment(req common.IncrementRequest) error { panic("test") }
+func (t testPanicOrca) Delete(req common.DeleteRequest) error       { panic("test") }
+func (t testPanicOrca) Touch(req common.TouchRequest) error         { panic("test") }
+func (t testPanicOrca) Get(req common.GetRequest) error             { panic("test") }
+func (t testPanicOrca) GetE(req common.GetRequest) error            { panic("test") }
+func (t testPanicOrca) Gat(req common.GATRequest) error             { panic("test") }
+func (t testPanicOrca) Noop(req common.NoopRequest) error           { panic("test") }
+func (t testPanicOrca) Quit(req common.QuitRequest) error           { panic("test") }
+func (t testPanicOrca) Version(req common.VersionRequest) error     { panic("test") }
+func (t testPanicOrca) Unknown(req common.Request) error            { panic("test") }
 
 func (t testPanicOrca) Error(req common.Request, reqType common.RequestType, err error) {}
 
@@ -238,6 +244,7 @@ func TestDefaultServer(t *testing.T) {
 		t.Run("Get", func(t *testing.T) {
 			testSuccess(t, "Get", common.RequestGet, common.GetRequest{
 				Keys:    [][]byte{[]byte("key")},
+				WithKey: []bool{false},
 				Opaques: []uint32{0},
 				Quiet:   []bool{false},
 			})
@@ -246,6 +253,7 @@ func TestDefaultServer(t *testing.T) {
 		t.Run("GetE", func(t *testing.T) {
 			testSuccess(t, "GetE", common.RequestGetE, common.GetRequest{
 				Keys:    [][]byte{[]byte("key")},
+				WithKey: []bool{false},
 				Opaques: []uint32{0},
 				Quiet:   []bool{false},
 			})

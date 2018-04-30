@@ -322,6 +322,7 @@ type reshandle struct {
 	key     []byte
 	opaque  uint32
 	quiet   bool
+	withKey bool
 	reschan chan response
 }
 
@@ -426,6 +427,18 @@ func (c *conn) batchIntoBuffer(reqs []request) (*bytes.Buffer, map[uint32]reshan
 
 			numExpected = 1
 
+		case common.RequestIncrement:
+			cmd := req.req.(common.IncrementRequest)
+			binprot.WriteIncrementCmd(buf, cmd.Key, cmd.Exptime, opaque, cmd.Delta, cmd.Initial, cmd.Decrement)
+			responses[opaque] = reshandle{
+				key:     cmd.Key,
+				opaque:  cmd.Opaque,
+				quiet:   cmd.Quiet,
+				reschan: req.reschan,
+			}
+
+			numExpected = 1
+
 		case common.RequestDelete:
 			cmd := req.req.(common.DeleteRequest)
 			binprot.WriteDeleteCmd(buf, cmd.Key, opaque)
@@ -471,6 +484,7 @@ func (c *conn) batchIntoBuffer(reqs []request) (*bytes.Buffer, map[uint32]reshan
 					key:     cmd.Keys[idx],
 					opaque:  cmd.Opaques[idx],
 					quiet:   cmd.Quiet[idx],
+					withKey: cmd.WithKey[idx],
 					reschan: req.reschan,
 				}
 				opaque++
@@ -487,6 +501,7 @@ func (c *conn) batchIntoBuffer(reqs []request) (*bytes.Buffer, map[uint32]reshan
 					key:     cmd.Keys[idx],
 					opaque:  cmd.Opaques[idx],
 					quiet:   cmd.Quiet[idx],
+					withKey: cmd.WithKey[idx],
 					reschan: req.reschan,
 				}
 				opaque++
@@ -550,10 +565,11 @@ readerOuter:
 						rh.reschan <- response{
 							err: nil,
 							gr: common.GetEResponse{
-								Miss:   true,
-								Quiet:  rh.quiet,
-								Opaque: rh.opaque,
-								Key:    rh.key,
+								Miss:    true,
+								Quiet:   rh.quiet,
+								Opaque:  rh.opaque,
+								WithKey: rh.withKey,
+								Key:     rh.key,
 							},
 						}
 					}
@@ -573,6 +589,8 @@ readerOuter:
 			// process, do some extra parsing
 			if resHeader.Opcode == binprot.OpcodeGet ||
 				resHeader.Opcode == binprot.OpcodeGetQ ||
+				resHeader.Opcode == binprot.OpcodeGetK ||
+				resHeader.Opcode == binprot.OpcodeGetKQ ||
 				resHeader.Opcode == binprot.OpcodeGat ||
 				resHeader.Opcode == binprot.OpcodeGetE ||
 				resHeader.Opcode == binprot.OpcodeGetEQ {
@@ -603,6 +621,17 @@ readerOuter:
 				dataLen := resHeader.TotalBodyLength - uint32(resHeader.KeyLength) - uint32(resHeader.ExtraLength)
 				buf := make([]byte, dataLen)
 
+				// discard the response key for getk(q) -- it is in rh already
+				if resHeader.KeyLength > 0 {
+					n, err = c.rw.Discard(int(resHeader.KeyLength))
+					metrics.IncCounterBy(common.MetricBytesReadLocal, uint64(n))
+					if err != nil {
+						// jump to error handling / reconnect / reset
+						recovery = true
+						continue readerOuter
+					}
+				}
+
 				// Read in value
 				n, err = io.ReadAtLeast(c.rw, buf, int(dataLen))
 				metrics.IncCounterBy(common.MetricBytesReadLocal, uint64(n))
@@ -623,6 +652,7 @@ readerOuter:
 							Exptime: serverExp,
 							Opaque:  rh.opaque,
 							Quiet:   rh.quiet,
+							WithKey: rh.withKey,
 						},
 					}
 
@@ -636,6 +666,40 @@ readerOuter:
 					panic("FATAL ERROR: Batch out of sync")
 				}
 
+			} else if resHeader.Opcode == binprot.OpcodeIncrement ||
+				resHeader.Opcode == binprot.OpcodeIncrementQ ||
+				resHeader.Opcode == binprot.OpcodeDecrement ||
+				resHeader.Opcode == binprot.OpcodeDecrementQ {
+
+				// Increment responses have a uint64 value immediately following the header
+				dataLen := resHeader.TotalBodyLength - uint32(resHeader.KeyLength) - uint32(resHeader.ExtraLength)
+				buf := make([]byte, dataLen)
+				n, err := io.ReadAtLeast(c.rw, buf, int(dataLen))
+				metrics.IncCounterBy(common.MetricBytesReadLocal, uint64(n))
+				if err != nil {
+					// jump to error handling / reconnect / reset
+					recovery = true
+					continue readerOuter
+				}
+
+				if rh, ok := batch.responses[resHeader.OpaqueToken]; ok {
+					// send the response back on the channel assigned to this token
+					rh.reschan <- response{
+						err: nil,
+						gr: common.GetEResponse{
+							Key:     rh.key,
+							Data:    buf,
+							Opaque:  rh.opaque,
+							Quiet:   rh.quiet,
+							WithKey: rh.withKey,
+						},
+					}
+
+					batch.channels[rh.reschan]--
+					delete(batch.responses, resHeader.OpaqueToken)
+				} else {
+					panic("FATAL ERROR: Batch out of sync")
+				}
 			} else {
 				// Non-get repsonses
 				// Discard the message for non-get responses

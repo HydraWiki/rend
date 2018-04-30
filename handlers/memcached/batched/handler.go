@@ -15,6 +15,7 @@
 package batched
 
 import (
+	"encoding/binary"
 	"math/rand"
 	"strconv"
 
@@ -179,6 +180,19 @@ func (h Handler) Set(cmd common.SetRequest) error {
 	return err
 }
 
+// Increment performs an increment operation on the backend.
+func (h Handler) Increment(cmd common.IncrementRequest) (uint64, error) {
+	gr, err := h.doRequest(cmd, common.RequestIncrement)
+	if err != nil {
+		return 0, err
+	}
+	var res uint64
+	if len(gr.Data) >= 8 {
+		res = binary.BigEndian.Uint64(gr.Data)
+	}
+	return res, nil
+}
+
 // Add performs an add operation on the backend. It only sets the value if it does not already exist.
 func (h Handler) Add(cmd common.SetRequest) error {
 	_, err := h.doRequest(cmd, common.RequestAdd)
@@ -217,12 +231,13 @@ func (h Handler) Touch(cmd common.TouchRequest) error {
 
 func getEResponseToGetResponse(res common.GetEResponse) common.GetResponse {
 	return common.GetResponse{
-		Key:    res.Key,
-		Data:   res.Data,
-		Flags:  res.Flags,
-		Opaque: res.Opaque,
-		Quiet:  res.Quiet,
-		Miss:   res.Miss,
+		Key:     res.Key,
+		Data:    res.Data,
+		Flags:   res.Flags,
+		Opaque:  res.Opaque,
+		Quiet:   res.Quiet,
+		Miss:    res.Miss,
+		WithKey: res.WithKey,
 	}
 }
 

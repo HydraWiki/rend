@@ -162,7 +162,17 @@ func (b BinaryParser) Parse() (common.Request, common.RequestType, uint64, error
 	case OpcodePrependQ:
 		return appendPrependRequest(b.reader, reqHeader, common.RequestPrepend, true, start)
 
-	case OpcodeGetQ:
+	case OpcodeIncrement:
+		return incrementDecrementRequest(b.reader, reqHeader, false, start)
+	case OpcodeIncrementQ:
+		return incrementDecrementRequest(b.reader, reqHeader, true, start)
+
+	case OpcodeDecrement:
+		return incrementDecrementRequest(b.reader, reqHeader, false, start)
+	case OpcodeDecrementQ:
+		return incrementDecrementRequest(b.reader, reqHeader, true, start)
+
+	case OpcodeGetQ, OpcodeGetKQ:
 		req, err := readBatchGet(b.reader, reqHeader)
 		if err != nil {
 			log.Println("Error reading batch get")
@@ -171,7 +181,7 @@ func (b BinaryParser) Parse() (common.Request, common.RequestType, uint64, error
 
 		return req, common.RequestGet, start, nil
 
-	case OpcodeGet:
+	case OpcodeGet, OpcodeGetK:
 		// key
 		key, err := readString(b.reader, reqHeader.KeyLength)
 		if err != nil {
@@ -181,6 +191,7 @@ func (b BinaryParser) Parse() (common.Request, common.RequestType, uint64, error
 
 		return common.GetRequest{
 			Keys:    [][]byte{key},
+			WithKey: []bool{reqHeader.Opcode == OpcodeGetK},
 			Opaques: []uint32{reqHeader.OpaqueToken},
 			Quiet:   []bool{false},
 			NoopEnd: false,
@@ -207,6 +218,7 @@ func (b BinaryParser) Parse() (common.Request, common.RequestType, uint64, error
 
 		return common.GetRequest{
 			Keys:    [][]byte{key},
+			WithKey: []bool{false},
 			Opaques: []uint32{reqHeader.OpaqueToken},
 			Quiet:   []bool{false},
 			NoopEnd: false,
@@ -294,6 +306,7 @@ func (b BinaryParser) Parse() (common.Request, common.RequestType, uint64, error
 
 func readBatchGet(r io.Reader, header *RequestHeader) (common.GetRequest, error) {
 	var keys [][]byte
+	var withKey []bool
 	var opaques []uint32
 	var quiet []bool
 	var noopOpaque uint32
@@ -301,9 +314,9 @@ func readBatchGet(r io.Reader, header *RequestHeader) (common.GetRequest, error)
 
 	first := true
 
-	// while GETQ
+	// while GET(K)Q
 	// read key, read header
-	for header.Opcode == OpcodeGetQ {
+	for header.Opcode == OpcodeGetQ || header.Opcode == OpcodeGetKQ {
 		// key
 		key, err := readString(r, header.KeyLength)
 		if err != nil {
@@ -311,6 +324,7 @@ func readBatchGet(r io.Reader, header *RequestHeader) (common.GetRequest, error)
 		}
 
 		keys = append(keys, key)
+		withKey = append(withKey, header.Opcode == OpcodeGetKQ)
 		opaques = append(opaques, header.OpaqueToken)
 		quiet = append(quiet, true)
 
@@ -326,7 +340,7 @@ func readBatchGet(r io.Reader, header *RequestHeader) (common.GetRequest, error)
 		}
 	}
 
-	if header.Opcode == OpcodeGet {
+	if header.Opcode == OpcodeGet || header.Opcode == OpcodeGetK {
 		// key
 		key, err := readString(r, header.KeyLength)
 		if err != nil {
@@ -334,6 +348,7 @@ func readBatchGet(r io.Reader, header *RequestHeader) (common.GetRequest, error)
 		}
 
 		keys = append(keys, key)
+		withKey = append(withKey, header.Opcode == OpcodeGetK)
 		opaques = append(opaques, header.OpaqueToken)
 		quiet = append(quiet, false)
 		noopEnd = false
@@ -354,6 +369,7 @@ func readBatchGet(r io.Reader, header *RequestHeader) (common.GetRequest, error)
 
 	return common.GetRequest{
 		Keys:       keys,
+		WithKey:    withKey,
 		Opaques:    opaques,
 		Quiet:      quiet,
 		NoopOpaque: noopOpaque,
@@ -423,6 +439,7 @@ func readBatchGetE(r io.Reader, header *RequestHeader) (common.GetRequest, error
 
 	return common.GetRequest{
 		Keys:       keys,
+		WithKey:    make([]bool, len(keys)),
 		Opaques:    opaques,
 		Quiet:      quiet,
 		NoopOpaque: noopOpaque,
@@ -497,6 +514,35 @@ func appendPrependRequest(r io.Reader, reqHeader *RequestHeader, reqType common.
 		Exptime: 0,
 		Opaque:  reqHeader.OpaqueToken,
 		Data:    dataBuf,
+	}, reqType, start, nil
+}
+
+func incrementDecrementRequest(r io.Reader, reqHeader *RequestHeader, quiet bool, start uint64) (common.IncrementRequest, common.RequestType, uint64, error) {
+	const reqType = common.RequestIncrement
+	buf := make([]byte, 20)
+	n, err := io.ReadAtLeast(r, buf, 20)
+	metrics.IncCounterBy(common.MetricBytesReadRemote, uint64(n))
+	if err != nil {
+		return common.IncrementRequest{}, reqType, start, err
+	}
+
+	key, err := readString(r, reqHeader.KeyLength)
+	if err != nil {
+		log.Println("Error reading key")
+		return common.IncrementRequest{}, reqType, start, err
+	}
+
+	delta := binary.BigEndian.Uint64(buf)
+	initial := binary.BigEndian.Uint64(buf[8:])
+	exptime := binary.BigEndian.Uint32(buf[16:])
+	return common.IncrementRequest{
+		Quiet:     quiet,
+		Key:       key,
+		Delta:     delta,
+		Initial:   initial,
+		Exptime:   exptime,
+		Opaque:    reqHeader.OpaqueToken,
+		Decrement: reqHeader.Opcode == OpcodeDecrement || reqHeader.Opcode == OpcodeDecrementQ,
 	}, reqType, start, nil
 }
 

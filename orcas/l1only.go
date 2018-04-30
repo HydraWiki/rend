@@ -166,6 +166,33 @@ func (l *L1OnlyOrca) Prepend(req common.SetRequest) error {
 	return err
 }
 
+func (l *L1OnlyOrca) Increment(req common.IncrementRequest) error {
+	//log.Println("increment", string(req.Key))
+
+	metrics.IncCounter(MetricCmdIncrementL1)
+	start := timer.Now()
+
+	res, err := l.l1.Increment(req)
+
+	metrics.ObserveHist(HistIncrementL1, timer.Since(start))
+
+	if err == nil {
+		metrics.IncCounter(MetricCmdIncrementStoredL1)
+		metrics.IncCounter(MetricCmdIncrementStored)
+
+		err = l.res.Increment(req.Opaque, req.Quiet, req.Decrement, res)
+
+	} else if err == common.ErrKeyNotFound {
+		metrics.IncCounter(MetricCmdIncrementNotStoredL1)
+		metrics.IncCounter(MetricCmdIncrementNotStored)
+	} else {
+		metrics.IncCounter(MetricCmdIncrementErrorsL1)
+		metrics.IncCounter(MetricCmdIncrementErrors)
+	}
+
+	return err
+}
+
 func (l *L1OnlyOrca) Delete(req common.DeleteRequest) error {
 	//log.Println("delete", string(req.Key))
 

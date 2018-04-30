@@ -106,6 +106,10 @@ const (
 	// RequestAdd will perform the same operations as set, but only if the key does not exist
 	RequestAdd
 
+	// RequestIncrement will increment or decrement the integer representation of the data for a
+	// given key.
+	RequestIncrement
+
 	// RequestReplace will perform the same operations as set, but only if the key already exists
 	RequestReplace
 
@@ -162,6 +166,7 @@ func (r SetRequest) IsQuiet() bool {
 // same type.
 type GetRequest struct {
 	Keys       [][]byte
+	WithKey    []bool
 	Opaques    []uint32
 	Quiet      []bool
 	NoopOpaque uint32
@@ -209,6 +214,26 @@ func (r TouchRequest) GetOpaque() uint32 {
 }
 
 func (r TouchRequest) IsQuiet() bool {
+	return r.Quiet
+}
+
+// IncrementRequest corresponds to common.RequestIncrement. It contains all the information required to
+// fulfill an increment or decrement request.
+type IncrementRequest struct {
+	Key       []byte
+	Delta     uint64
+	Initial   uint64
+	Exptime   uint32
+	Opaque    uint32
+	Quiet     bool
+	Decrement bool
+}
+
+func (r IncrementRequest) GetOpaque() uint32 {
+	return r.Opaque
+}
+
+func (r IncrementRequest) IsQuiet() bool {
 	return r.Quiet
 }
 
@@ -276,15 +301,17 @@ func (r VersionRequest) IsQuiet() bool {
 // but with different opcodes. It is binary-protocol specific, but is still a part of the interface
 // of responder to make the handling code more protocol-agnostic.
 type GetResponse struct {
-	Key    []byte
-	Data   []byte
-	Opaque uint32
-	Flags  uint32
-	Miss   bool
-	Quiet  bool
+	Key     []byte
+	Data    []byte
+	Opaque  uint32
+	Flags   uint32
+	Miss    bool
+	Quiet   bool
+	WithKey bool
 }
 
-// GetEResponse is used in the GetE protocol extension
+// GetEResponse is used in the GetE protocol extension.  While GetE does not have a "with-key" variant,
+// it is convenient to handler implementations that the struct contains WithKey.
 type GetEResponse struct {
 	Key     []byte
 	Data    []byte
@@ -293,4 +320,5 @@ type GetEResponse struct {
 	Exptime uint32
 	Miss    bool
 	Quiet   bool
+	WithKey bool
 }

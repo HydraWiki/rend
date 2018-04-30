@@ -29,20 +29,21 @@ func testPanicOrcaConst(l1, l2 handlers.Handler, res protocol.Responder) orcas.O
 	return testPanicOrca{}
 }
 
-func (t testPanicOrca) Set(req common.SetRequest) error         { panic("test") }
-func (t testPanicOrca) Add(req common.SetRequest) error         { panic("test") }
-func (t testPanicOrca) Replace(req common.SetRequest) error     { panic("test") }
-func (t testPanicOrca) Append(req common.SetRequest) error      { panic("test") }
-func (t testPanicOrca) Prepend(req common.SetRequest) error     { panic("test") }
-func (t testPanicOrca) Delete(req common.DeleteRequest) error   { panic("test") }
-func (t testPanicOrca) Touch(req common.TouchRequest) error     { panic("test") }
-func (t testPanicOrca) Get(req common.GetRequest) error         { panic("test") }
-func (t testPanicOrca) GetE(req common.GetRequest) error        { panic("test") }
-func (t testPanicOrca) Gat(req common.GATRequest) error         { panic("test") }
-func (t testPanicOrca) Noop(req common.NoopRequest) error       { panic("test") }
-func (t testPanicOrca) Quit(req common.QuitRequest) error       { panic("test") }
-func (t testPanicOrca) Version(req common.VersionRequest) error { panic("test") }
-func (t testPanicOrca) Unknown(req common.Request) error        { panic("test") }
+func (t testPanicOrca) Set(req common.SetRequest) error             { panic("test") }
+func (t testPanicOrca) Add(req common.SetRequest) error             { panic("test") }
+func (t testPanicOrca) Replace(req common.SetRequest) error         { panic("test") }
+func (t testPanicOrca) Append(req common.SetRequest) error          { panic("test") }
+func (t testPanicOrca) Prepend(req common.SetRequest) error         { panic("test") }
+func (t testPanicOrca) Increment(req common.IncrementRequest) error { panic("test") }
+func (t testPanicOrca) Delete(req common.DeleteRequest) error       { panic("test") }
+func (t testPanicOrca) Touch(req common.TouchRequest) error         { panic("test") }
+func (t testPanicOrca) Get(req common.GetRequest) error             { panic("test") }
+func (t testPanicOrca) GetE(req common.GetRequest) error            { panic("test") }
+func (t testPanicOrca) Gat(req common.GATRequest) error             { panic("test") }
+func (t testPanicOrca) Noop(req common.NoopRequest) error           { panic("test") }
+func (t testPanicOrca) Quit(req common.QuitRequest) error           { panic("test") }
+func (t testPanicOrca) Version(req common.VersionRequest) error     { panic("test") }
+func (t testPanicOrca) Unknown(req common.Request) error            { panic("test") }
 
 func (t testPanicOrca) Error(req common.Request, reqType common.RequestType, err error) {}
 

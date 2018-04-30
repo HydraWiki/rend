@@ -96,6 +96,35 @@ func WritePrependCmd(w io.Writer, key []byte, flags, exptime, dataSize, opaque u
 	return writeAppendPrependCmdCommon(w, OpcodePrepend, key, flags, exptime, dataSize, opaque)
 }
 
+// WriteIncrementCmd writes out the binary representation of an increment or decrement request to the given io.Writer
+func WriteIncrementCmd(w io.Writer, key []byte, exptime, opaque uint32, delta, initial uint64, decrement bool) error {
+	// opcode, keyLength, extraLength, totalBodyLength
+	// key + extras
+	extrasLen := 20
+	totalBodyLength := len(key) + extrasLen
+	opcode := OpcodeIncrement
+	if decrement {
+		opcode = OpcodeDecrement
+	}
+	header := makeRequestHeader(opcode, len(key), extrasLen, totalBodyLength, opaque)
+
+	writeRequestHeader(w, header)
+
+	// write extras and key
+	buf := make([]byte, len(key)+20)
+	binary.BigEndian.PutUint64(buf[0:], delta)
+	binary.BigEndian.PutUint64(buf[8:], initial)
+	binary.BigEndian.PutUint32(buf[16:], exptime)
+	copy(buf[20:], key)
+
+	n, err := w.Write(buf)
+	metrics.IncCounterBy(common.MetricBytesWrittenLocal, uint64(n))
+
+	reqHeadPool.Put(header)
+
+	return err
+}
+
 // Key commands send the header and key only
 func writeKeyCmd(w io.Writer, opcode uint8, key []byte, opaque uint32) error {
 	// opcode, keyLength, extraLength, totalBodyLength

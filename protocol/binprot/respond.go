@@ -38,6 +38,22 @@ import (
 //     Key                 : None
 //     Value        (28-32): The textual string "World"
 
+// Sample GetK response
+// Field        (offset) (value)
+//     Magic        (0)    : 0x81
+//     Opcode       (1)    : 0x00
+//     Key length   (2,3)  : 0x0005
+//     Extra length (4)    : 0x04
+//     Data type    (5)    : 0x00
+//     Status       (6,7)  : 0x0000
+//     Total body   (8-11) : 0x0000000E
+//     Opaque       (12-15): 0x00000000
+//     CAS          (16-23): 0x0000000000000001
+//     Extras              :
+//       Flags      (24-27): 0xdeadbeef
+//     Key          (28-32): The textual string: "Hello"
+//     Value        (33-37): The textual string: "World"
+
 // Sample GetE response
 // Field        (offset) (value)
 //     Magic        (0)    : 0x81
@@ -158,6 +174,26 @@ func (b BinaryResponder) Prepend(opaque uint32, quiet bool) error {
 	if !quiet {
 		return writeSuccessResponseHeader(b.writer, OpcodePrepend, 0, 0, 0, opaque, true)
 	}
+	return nil
+}
+
+func (b BinaryResponder) Increment(opaque uint32, quiet, decrement bool, response uint64) error {
+	if quiet {
+		return nil
+	}
+
+	opcode := OpcodeIncrement
+	if decrement {
+		opcode = OpcodeDecrement
+	}
+
+	writeSuccessResponseHeader(b.writer, opcode, 0, 0, 8, opaque, false)
+	binary.Write(b.writer, binary.BigEndian, response)
+
+	if err := b.writer.Flush(); err != nil {
+		return err
+	}
+	metrics.IncCounterBy(common.MetricBytesWrittenRemote, uint64(8))
 	return nil
 }
 
@@ -291,12 +327,19 @@ func reqTypeToOpcode(rt common.RequestType, quiet bool) uint8 {
 }
 
 func getCommon(w *bufio.Writer, response common.GetResponse, opcode uint8) error {
-	// total body length = extras (flags, 4 bytes) + data length
-	totalBodyLength := len(response.Data) + 4
-	writeSuccessResponseHeader(w, opcode, 0, 4, totalBodyLength, response.Opaque, false)
+	var keyLength int
+	if response.WithKey {
+		keyLength = len(response.Key)
+	}
+	// total body length = extras (flags, 4 bytes) + data length + key length
+	totalBodyLength := len(response.Data) + 4 + keyLength
+	writeSuccessResponseHeader(w, opcode, keyLength, 4, totalBodyLength, response.Opaque, false)
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint32(buf, response.Flags)
 	w.Write(buf)
+	if response.WithKey {
+		w.Write(response.Key)
+	}
 	w.Write(response.Data)
 	if err := w.Flush(); err != nil {
 		return err

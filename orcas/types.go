@@ -29,6 +29,7 @@ type Orca interface {
 	Replace(req common.SetRequest) error
 	Append(req common.SetRequest) error
 	Prepend(req common.SetRequest) error
+	Increment(req common.IncrementRequest) error
 	Delete(req common.DeleteRequest) error
 	Touch(req common.TouchRequest) error
 	Get(req common.GetRequest) error
@@ -168,6 +169,18 @@ var (
 	MetricCmdPrependErrorsL1    = metrics.AddCounter("cmd_prepend_errors_l1", nil)
 	MetricCmdPrependErrorsL2    = metrics.AddCounter("cmd_prepend_errors_l2", nil)
 
+	MetricCmdIncrementL1          = metrics.AddCounter("cmd_increment_l1", nil)
+	MetricCmdIncrementL2          = metrics.AddCounter("cmd_increment_l2", nil)
+	MetricCmdIncrementStored      = metrics.AddCounter("cmd_increment_stored", nil)
+	MetricCmdIncrementStoredL1    = metrics.AddCounter("cmd_increment_stored_l1", nil)
+	MetricCmdIncrementStoredL2    = metrics.AddCounter("cmd_increment_stored_l2", nil)
+	MetricCmdIncrementNotStored   = metrics.AddCounter("cmd_increment_not_stored", nil)
+	MetricCmdIncrementNotStoredL1 = metrics.AddCounter("cmd_increment_not_stored_l1", nil)
+	MetricCmdIncrementNotStoredL2 = metrics.AddCounter("cmd_increment_not_stored_l2", nil)
+	MetricCmdIncrementErrors      = metrics.AddCounter("cmd_increment_errors", nil)
+	MetricCmdIncrementErrorsL1    = metrics.AddCounter("cmd_increment_errors_l1", nil)
+	MetricCmdIncrementErrorsL2    = metrics.AddCounter("cmd_increment_errors_l2", nil)
+
 	MetricCmdDeleteL1       = metrics.AddCounter("cmd_delete_l1", nil)
 	MetricCmdDeleteL2       = metrics.AddCounter("cmd_delete_l2", nil)
 	MetricCmdDeleteHits     = metrics.AddCounter("cmd_delete_hits", nil)
@@ -231,20 +244,22 @@ var (
 	MetricInconsistencyDetected = metrics.AddCounter("inconsistency_detected", nil)
 
 	// Histograms for sub-operations
-	HistSetL1     = metrics.AddHistogram("set_l1", false, nil)
-	HistSetL2     = metrics.AddHistogram("set_l2", false, nil)
-	HistAddL1     = metrics.AddHistogram("add_l1", false, nil)
-	HistAddL2     = metrics.AddHistogram("add_l2", false, nil)
-	HistReplaceL1 = metrics.AddHistogram("replace_l1", false, nil)
-	HistReplaceL2 = metrics.AddHistogram("replace_l2", false, nil)
-	HistAppendL1  = metrics.AddHistogram("append_l1", false, nil)
-	HistAppendL2  = metrics.AddHistogram("append_l2", false, nil)
-	HistPrependL1 = metrics.AddHistogram("prepend_l1", false, nil)
-	HistPrependL2 = metrics.AddHistogram("prepend_l2", false, nil)
-	HistDeleteL1  = metrics.AddHistogram("delete_l1", false, nil)
-	HistDeleteL2  = metrics.AddHistogram("delete_l2", false, nil)
-	HistTouchL1   = metrics.AddHistogram("touch_l1", false, nil)
-	HistTouchL2   = metrics.AddHistogram("touch_l2", false, nil)
+	HistSetL1       = metrics.AddHistogram("set_l1", false, nil)
+	HistSetL2       = metrics.AddHistogram("set_l2", false, nil)
+	HistAddL1       = metrics.AddHistogram("add_l1", false, nil)
+	HistAddL2       = metrics.AddHistogram("add_l2", false, nil)
+	HistReplaceL1   = metrics.AddHistogram("replace_l1", false, nil)
+	HistReplaceL2   = metrics.AddHistogram("replace_l2", false, nil)
+	HistAppendL1    = metrics.AddHistogram("append_l1", false, nil)
+	HistAppendL2    = metrics.AddHistogram("append_l2", false, nil)
+	HistPrependL1   = metrics.AddHistogram("prepend_l1", false, nil)
+	HistPrependL2   = metrics.AddHistogram("prepend_l2", false, nil)
+	HistIncrementL1 = metrics.AddHistogram("increment_l1", false, nil)
+	HistIncrementL2 = metrics.AddHistogram("increment_l2", false, nil)
+	HistDeleteL1    = metrics.AddHistogram("delete_l1", false, nil)
+	HistDeleteL2    = metrics.AddHistogram("delete_l2", false, nil)
+	HistTouchL1     = metrics.AddHistogram("touch_l1", false, nil)
+	HistTouchL2     = metrics.AddHistogram("touch_l2", false, nil)
 
 	HistGetL1 = metrics.AddHistogram("get_l1", false, nil) // not sampled until configurable
 	HistGetL2 = metrics.AddHistogram("get_l2", false, nil) // not sampled until configurable

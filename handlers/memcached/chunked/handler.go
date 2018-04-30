@@ -462,6 +462,11 @@ func (h Handler) handleAppendPrependCommon(cmd common.SetRequest, reqType common
 	return h.handleSetCommon(setcmd, common.RequestSet)
 }
 
+// Increment is not supported by the chunked handler and will always return an error.
+func (h Handler) Increment(cmd common.IncrementRequest) (uint64, error) {
+	return 0, common.ErrNotSupported
+}
+
 // Get performs a batched get request on the remote backend. The channels returned
 // are expected to be read from until either a single error is received or the
 // response channel is exhausted.
@@ -486,12 +491,13 @@ func realHandleGet(cmd common.GetRequest, dataOut chan common.GetResponse, error
 outer:
 	for idx, key := range cmd.Keys {
 		missResponse := common.GetResponse{
-			Miss:   true,
-			Quiet:  cmd.Quiet[idx],
-			Opaque: cmd.Opaques[idx],
-			Flags:  0,
-			Key:    key,
-			Data:   nil,
+			Miss:    true,
+			Quiet:   cmd.Quiet[idx],
+			Opaque:  cmd.Opaques[idx],
+			WithKey: cmd.WithKey[idx],
+			Flags:   0,
+			Key:     key,
+			Data:    nil,
 		}
 
 		_, metaData, err := getMetadata(rw, key)
@@ -590,12 +596,13 @@ outer:
 		}
 
 		dataOut <- common.GetResponse{
-			Miss:   false,
-			Quiet:  cmd.Quiet[idx],
-			Opaque: cmd.Opaques[idx],
-			Flags:  metaData.OrigFlags,
-			Key:    key,
-			Data:   dataBuf,
+			Miss:    false,
+			Quiet:   cmd.Quiet[idx],
+			Opaque:  cmd.Opaques[idx],
+			WithKey: cmd.WithKey[idx],
+			Flags:   metaData.OrigFlags,
+			Key:     key,
+			Data:    dataBuf,
 		}
 	}
 }

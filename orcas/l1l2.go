@@ -16,6 +16,7 @@ package orcas
 
 import (
 	"log"
+	"strconv"
 
 	"github.com/netflix/rend/common"
 	"github.com/netflix/rend/handlers"
@@ -386,6 +387,72 @@ func (l *L1L2Orca) Prepend(req common.SetRequest) error {
 	return l.res.Prepend(req.Opaque, req.Quiet)
 }
 
+func (l *L1L2Orca) Increment(req common.IncrementRequest) error {
+	//log.Println("append", string(req.Key))
+
+	// Increment is implemented much like append.
+	metrics.IncCounter(MetricCmdIncrementL2)
+	start := timer.Now()
+
+	res, err := l.l2.Increment(req)
+
+	metrics.ObserveHist(HistIncrementL2, timer.Since(start))
+
+	if err != nil {
+		// Incrementing in L2 did not succeed. Don't try in L1 since this means L2
+		// may not have succeeded.
+		if err == common.ErrItemNotStored {
+			metrics.IncCounter(MetricCmdIncrementNotStoredL2)
+			metrics.IncCounter(MetricCmdIncrementNotStored)
+			return err
+		}
+
+		metrics.IncCounter(MetricCmdIncrementErrorsL2)
+		metrics.IncCounter(MetricCmdIncrementErrors)
+		return err
+	}
+
+	// L2 succeeded, so update L1 by replacing with L2's response.
+	metrics.IncCounter(MetricCmdIncrementL1)
+	start = timer.Now()
+
+	// For the replace, clear exptime if it's all ones.
+	exptime := req.Exptime
+	if exptime == 0xffffffff {
+		exptime = 0
+	}
+
+	err = l.l1.Replace(common.SetRequest{
+		Key:     req.Key,
+		Data:    strconv.AppendUint(nil, res, 10),
+		Exptime: exptime,
+		Opaque:  req.Opaque,
+		Quiet:   req.Quiet,
+	})
+
+	metrics.ObserveHist(HistIncrementL1, timer.Since(start))
+
+	if err != nil {
+		// Not stored in L1 is still fine. There's a possibility that a
+		// concurrent delete happened or that the data has just been pushed out
+		// of L1. Increment will not bring data back into L1 as it's not necessarily
+		// going to be immediately read.
+		if err == common.ErrItemNotStored || err == common.ErrKeyNotFound {
+			metrics.IncCounter(MetricCmdIncrementNotStoredL1)
+			metrics.IncCounter(MetricCmdIncrementStored)
+			return l.res.Increment(req.Opaque, req.Quiet, req.Decrement, res)
+		}
+
+		metrics.IncCounter(MetricCmdIncrementErrorsL1)
+		metrics.IncCounter(MetricCmdIncrementErrors)
+		return err
+	}
+
+	metrics.IncCounter(MetricCmdIncrementStoredL1)
+	metrics.IncCounter(MetricCmdIncrementStored)
+	return l.res.Increment(req.Opaque, req.Quiet, req.Decrement, res)
+}
+
 func (l *L1L2Orca) Delete(req common.DeleteRequest) error {
 	//log.Println("delete", string(req.Key))
 
@@ -539,6 +606,7 @@ func (l *L1L2Orca) Get(req common.GetRequest) error {
 	var err error
 	//var lastres common.GetResponse
 	var l2keys [][]byte
+	var l2withKeys []bool
 	var l2opaques []uint32
 	var l2quiets []bool
 
@@ -556,6 +624,7 @@ func (l *L1L2Orca) Get(req common.GetRequest) error {
 				if res.Miss {
 					metrics.IncCounter(MetricCmdGetMissesL1)
 					l2keys = append(l2keys, res.Key)
+					l2withKeys = append(l2withKeys, res.WithKey)
 					l2opaques = append(l2opaques, res.Opaque)
 					l2quiets = append(l2quiets, res.Quiet)
 				} else {
@@ -594,6 +663,7 @@ func (l *L1L2Orca) Get(req common.GetRequest) error {
 	// Time for the same dance with L2
 	req = common.GetRequest{
 		Keys:       l2keys,
+		WithKey:    l2withKeys,
 		NoopEnd:    req.NoopEnd,
 		NoopOpaque: req.NoopOpaque,
 		Opaques:    l2opaques,
@@ -672,12 +742,13 @@ func (l *L1L2Orca) Get(req common.GetRequest) error {
 				}
 
 				getres := common.GetResponse{
-					Key:    res.Key,
-					Flags:  res.Flags,
-					Data:   res.Data,
-					Miss:   res.Miss,
-					Opaque: res.Opaque,
-					Quiet:  res.Quiet,
+					Key:     res.Key,
+					Flags:   res.Flags,
+					Data:    res.Data,
+					Miss:    res.Miss,
+					Opaque:  res.Opaque,
+					Quiet:   res.Quiet,
+					WithKey: res.WithKey,
 				}
 
 				l.res.Get(getres)

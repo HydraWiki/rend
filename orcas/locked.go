@@ -188,6 +188,14 @@ func (l *LockedOrca) Prepend(req common.SetRequest) error {
 	return ret
 }
 
+func (l *LockedOrca) Increment(req common.IncrementRequest) error {
+	lock := l.getlock(req.Key, false)
+	lock.Lock()
+	defer lock.Unlock()
+	ret := l.wrapped.Increment(req)
+	return ret
+}
+
 func (l *LockedOrca) Delete(req common.DeleteRequest) error {
 	lock := l.getlock(req.Key, false)
 	lock.Lock()
@@ -235,6 +243,7 @@ func (l *LockedOrca) Get(req common.GetRequest) error {
 
 		subreq := common.GetRequest{
 			Keys:       [][]byte{key},
+			WithKey:    []bool{req.WithKey[idx]},
 			Opaques:    []uint32{req.Opaques[idx]},
 			Quiet:      []bool{req.Quiet[idx]},
 			NoopOpaque: noopOpaque,
@@ -291,6 +300,7 @@ func (l *LockedOrca) GetE(req common.GetRequest) error {
 
 		subreq := common.GetRequest{
 			Keys:       [][]byte{key},
+			WithKey:    []bool{req.WithKey[idx]},
 			Opaques:    []uint32{req.Opaques[idx]},
 			Quiet:      []bool{req.Quiet[idx]},
 			NoopOpaque: noopOpaque,

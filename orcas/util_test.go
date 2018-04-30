@@ -63,6 +63,11 @@ func (h *testHandler) Prepend(cmd common.SetRequest) error {
 	h.errors = h.errors[1:]
 	return ret
 }
+func (h *testHandler) Increment(cmd common.IncrementRequest) (uint64, error) {
+	err := h.errors[0]
+	h.errors = h.errors[1:]
+	return 0, err
+}
 func (h *testHandler) Get(cmd common.GetRequest) (<-chan common.GetResponse, <-chan error) {
 	if len(h.responses) > 0 {
 		res := h.responses[0]

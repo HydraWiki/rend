@@ -52,6 +52,21 @@ func (t TextResponder) Prepend(opaque uint32, quiet bool) error {
 	return t.resp("STORED")
 }
 
+func (t TextResponder) Increment(opaque uint32, quiet, decrement bool, response uint64) error {
+	if quiet {
+		return nil
+	}
+
+	n, err := fmt.Fprintf(t.writer, "%d\r\n", response)
+	metrics.IncCounterBy(common.MetricBytesWrittenRemote, uint64(n))
+	if err != nil {
+		return err
+	}
+
+	t.writer.Flush()
+	return nil
+}
+
 func (t TextResponder) Get(response common.GetResponse) error {
 	if response.Miss {
 		// A miss is a no-op in the text world

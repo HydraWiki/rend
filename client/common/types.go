@@ -19,6 +19,7 @@ import (
 	"errors"
 )
 
+// Prot is the interface implemented by the binary and text client protocols.
 type Prot interface {
 	// Yes, the abstraction is a little bit leaky, but the code
 	// in other places benefits from the consistency.

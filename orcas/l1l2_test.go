@@ -140,6 +140,7 @@ func TestL1L2Orca(t *testing.T) {
 
 						err := l1l2.Get(common.GetRequest{
 							Keys:    [][]byte{[]byte("key")},
+							WithKey: []bool{false},
 							Opaques: []uint32{0},
 							Quiet:   []bool{false},
 							NoopEnd: false,

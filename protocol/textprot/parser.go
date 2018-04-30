@@ -83,6 +83,7 @@ func (t TextParser) Parse() (common.Request, common.RequestType, uint64, error) 
 
 		return common.GetRequest{
 			Keys:    keys,
+			WithKey: make([]bool, len(keys)),
 			Opaques: opaques,
 			Quiet:   quiet,
 			NoopEnd: false,

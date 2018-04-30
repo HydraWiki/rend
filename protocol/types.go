@@ -45,6 +45,7 @@ type Responder interface {
 	GetEnd(opaque uint32, noopEnd bool) error
 	GetE(response common.GetEResponse) error
 	GAT(response common.GetResponse) error
+	Increment(opaque uint32, quiet, decrement bool, response uint64) error
 	Delete(opaque uint32) error
 	Touch(opaque uint32) error
 	Noop(opaque uint32) error

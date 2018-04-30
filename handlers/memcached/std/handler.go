@@ -16,6 +16,7 @@ package std
 
 import (
 	"bufio"
+	"encoding/binary"
 	"io"
 
 	"github.com/netflix/rend/common"
@@ -131,6 +132,43 @@ func (h Handler) handleSetCommon(cmd common.SetRequest) error {
 	return nil
 }
 
+// Increment performs an increment or decrement request on the remote backend
+func (h Handler) Increment(cmd common.IncrementRequest) (uint64, error) {
+	if err := binprot.WriteIncrementCmd(h.rw.Writer, cmd.Key, cmd.Exptime, cmd.Opaque, cmd.Delta, cmd.Initial, cmd.Decrement); err != nil {
+		return 0, err
+	}
+
+	if err := h.rw.Flush(); err != nil {
+		return 0, err
+	}
+
+	resHeader, err := readResponseHeader(h.rw.Reader)
+	if err != nil || resHeader.TotalBodyLength < 8 {
+		// Discard response body
+		n, ioerr := h.rw.Discard(int(resHeader.TotalBodyLength))
+		metrics.IncCounterBy(common.MetricBytesReadLocal, uint64(n))
+		if ioerr != nil {
+			return 0, ioerr
+		}
+
+		if resHeader.TotalBodyLength < 8 {
+			return 0, common.ErrInternal
+		}
+
+		return 0, err
+	}
+
+	buf := make([]byte, int(resHeader.TotalBodyLength))
+	n, err := io.ReadAtLeast(h.rw, buf, int(resHeader.TotalBodyLength))
+	metrics.IncCounterBy(common.MetricBytesReadLocal, uint64(n))
+	if err != nil {
+		return 0, err
+	}
+	res := binary.BigEndian.Uint64(buf)
+
+	return res, nil
+}
+
 // Get performs a batched get request on the remote backend. The channels returned
 // are expected to be read from until either a single error is received or the
 // response channel is exhausted.
@@ -155,12 +193,13 @@ func realHandleGet(cmd common.GetRequest, dataOut chan common.GetResponse, error
 		if err != nil {
 			if err == common.ErrKeyNotFound {
 				dataOut <- common.GetResponse{
-					Miss:   true,
-					Quiet:  cmd.Quiet[idx],
-					Opaque: cmd.Opaques[idx],
-					Flags:  flags,
-					Key:    key,
-					Data:   nil,
+					Miss:    true,
+					Quiet:   cmd.Quiet[idx],
+					Opaque:  cmd.Opaques[idx],
+					WithKey: cmd.WithKey[idx],
+					Flags:   flags,
+					Key:     key,
+					Data:    nil,
 				}
 
 				continue
@@ -171,12 +210,13 @@ func realHandleGet(cmd common.GetRequest, dataOut chan common.GetResponse, error
 		}
 
 		dataOut <- common.GetResponse{
-			Miss:   false,
-			Quiet:  cmd.Quiet[idx],
-			Opaque: cmd.Opaques[idx],
-			Flags:  flags,
-			Key:    key,
-			Data:   data,
+			Miss:    false,
+			Quiet:   cmd.Quiet[idx],
+			Opaque:  cmd.Opaques[idx],
+			WithKey: cmd.WithKey[idx],
+			Flags:   flags,
+			Key:     key,
+			Data:    data,
 		}
 	}
 }
@@ -208,6 +248,7 @@ func realHandleGetE(cmd common.GetRequest, dataOut chan common.GetEResponse, err
 					Miss:    true,
 					Quiet:   cmd.Quiet[idx],
 					Opaque:  cmd.Opaques[idx],
+					WithKey: cmd.WithKey[idx],
 					Flags:   flags,
 					Exptime: exp,
 					Key:     key,
@@ -225,6 +266,7 @@ func realHandleGetE(cmd common.GetRequest, dataOut chan common.GetEResponse, err
 			Miss:    false,
 			Quiet:   cmd.Quiet[idx],
 			Opaque:  cmd.Opaques[idx],
+			WithKey: cmd.WithKey[idx],
 			Flags:   flags,
 			Exptime: exp,
 			Key:     key,
